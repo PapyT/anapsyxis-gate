@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Anapsyxis 2026 — Gate Scanner</title>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:#0d0d0d;font-family:'Lexend',system-ui,sans-serif;color:#fff}
+#app{height:100%;display:flex;flex-direction:column;max-width:480px;margin:0 auto;position:relative}
+
+.header{background:#111;border-bottom:1px solid #1e1e1e;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.header-title{font-size:15px;font-weight:700;color:#C9A227}
+.header-sub{font-size:11px;color:#444;margin-top:1px}
+.header-btns{display:flex;gap:8px}
+.icon-btn{padding:9px 12px;background:#1a1a1a;border:1px solid #252525;border-radius:9px;color:#777;font-size:16px;cursor:pointer;transition:all .15s;line-height:1;font-family:'Lexend',sans-serif}
+.icon-btn:active{background:#222}
+
+.body{flex:1;overflow-y:auto;padding:16px;position:relative}
+
+.scanner-wrap{border-radius:16px;overflow:hidden;background:#111;position:relative;width:100%;aspect-ratio:1;margin-bottom:14px;display:flex;align-items:center;justify-content:center}
+video{width:100%;height:100%;object-fit:cover;display:block;position:absolute;inset:0}
+canvas{display:none}
+.scan-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:2}
+.scan-frame{width:58%;aspect-ratio:1;position:relative}
+.corner{position:absolute;width:26px;height:26px}
+.corner.tl{top:0;left:0;border-top:3px solid #C9A227;border-left:3px solid #C9A227;border-radius:4px 0 0 0}
+.corner.tr{top:0;right:0;border-top:3px solid #C9A227;border-right:3px solid #C9A227;border-radius:0 4px 0 0}
+.corner.bl{bottom:0;left:0;border-bottom:3px solid #C9A227;border-left:3px solid #C9A227;border-radius:0 0 0 4px}
+.corner.br{bottom:0;right:0;border-bottom:3px solid #C9A227;border-right:3px solid #C9A227;border-radius:0 0 4px 0}
+.scanline{position:absolute;left:4px;right:4px;height:2px;background:linear-gradient(90deg,transparent,#C9A227,transparent);animation:scan 2s linear infinite}
+@keyframes scan{0%{top:4px}50%{top:calc(100% - 6px)}100%{top:4px}}
+
+.cam-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:3;background:#111;border-radius:16px;padding:24px;text-align:center}
+.cam-state-icon{font-size:36px}
+.cam-state-title{font-size:14px;font-weight:600;color:#aaa}
+.cam-state-msg{font-size:12px;color:#555;line-height:1.6}
+.reload-btn{margin-top:6px;padding:10px 24px;background:#C9A227;border:none;border-radius:8px;color:#1a1a0e;font-weight:700;font-size:13px;cursor:pointer;font-family:'Lexend',sans-serif}
+
+.scan-hint{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;color:#444;margin-bottom:16px}
+.pulse{width:6px;height:6px;border-radius:50%;background:#C9A227;animation:pulse 1.5s infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.manual-entry{display:flex;gap:8px;margin-bottom:4px}
+.reg-input{flex:1;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:12px 14px;color:#fff;font-size:14px;font-family:'Lexend',sans-serif;outline:none}
+.reg-input:focus{border-color:#C9A22766}
+.reg-input::placeholder{color:#333}
+.lookup-btn{padding:12px 16px;background:#C9A227;border:none;border-radius:10px;color:#1a1a0e;font-weight:700;font-size:14px;cursor:pointer;font-family:'Lexend',sans-serif}
+.lookup-btn:active{opacity:.85}
+
+.result-card{border-radius:14px;padding:18px 18px 14px;margin-bottom:14px;animation:slidein .25s ease}
+@keyframes slidein{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.status-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:13px}
+.status-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;flex-shrink:0}
+.status-label{font-size:12px;font-weight:700;letter-spacing:.8px}
+.status-sub{font-size:11px;margin-top:2px;opacity:.7}
+.att-label{font-size:10px;color:#555;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px}
+.att-name{font-size:22px;font-weight:700;color:#fff;line-height:1.2;margin-bottom:14px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:16px}
+.dl{font-size:10px;color:#555;letter-spacing:.8px;text-transform:uppercase;margin-bottom:2px}
+.dv{font-size:13px;font-weight:500;color:#ccc}
+.dv.hi{font-size:15px;font-weight:700;color:#C9A227;letter-spacing:1px}
+.dv.mono{font-family:monospace;font-size:12px;color:#aaa}
+.gbadge{display:inline-block;font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;letter-spacing:.3px}
+.action-row{display:flex;gap:10px}
+.checkin-btn{flex:1;padding:13px 0;border-radius:10px;border:none;background:#2e7d32;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'Lexend',sans-serif}
+.checkin-btn:active{background:#388e3c}
+.checkin-btn:disabled{background:#1a3a1a;cursor:not-allowed}
+.cancel-btn{padding:13px 18px;border-radius:10px;border:1px solid #2a2a2a;background:transparent;color:#666;font-size:14px;cursor:pointer;font-family:'Lexend',sans-serif}
+.next-btn{width:100%;padding:15px 0;border-radius:12px;border:none;background:#C9A227;color:#1a1a0e;font-size:15px;font-weight:700;cursor:pointer;font-family:'Lexend',sans-serif}
+.next-btn:active{opacity:.85}
+
+.success-banner{background:#0a2a0a;border:1px solid #2e7d32;border-radius:12px;padding:20px;text-align:center;margin-bottom:14px;animation:slidein .3s ease}
+.success-icon{font-size:36px;margin-bottom:8px}
+.success-title{font-size:16px;font-weight:700;color:#66bb6a}
+.success-time{font-size:11px;color:#2e7d3288;margin-top:3px}
+
+.info-card{border-radius:14px;padding:24px;text-align:center;margin-bottom:14px;animation:slidein .25s ease}
+.info-emoji{font-size:40px;margin-bottom:12px}
+.info-title{font-size:15px;font-weight:700;margin-bottom:6px}
+.info-msg{font-size:13px;color:#555;margin-bottom:20px;line-height:1.6}
+
+.overlay{position:absolute;inset:0;z-index:30;display:none}
+#stats-overlay{background:rgba(0,0,0,.92);align-items:center;justify-content:center;padding:24px}
+.stats-panel{background:#111;border:1px solid #252525;border-radius:20px;padding:24px;width:100%}
+.stats-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.stats-title{font-size:15px;font-weight:700;color:#C9A227}
+.close-btn{background:none;border:none;color:#555;font-size:20px;cursor:pointer;padding:2px 8px;line-height:1}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat-card{background:#1a1a1a;border:1px solid #222;border-radius:12px;padding:14px}
+.stat-num{font-size:30px;font-weight:800;line-height:1}
+.stat-lbl{font-size:10px;color:#555;margin-top:4px;letter-spacing:.3px}
+
+#search-overlay{background:#0d0d0d;flex-direction:column}
+.search-bar{background:#111;border-bottom:1px solid #1e1e1e;padding:14px;display:flex;gap:8px;flex-shrink:0}
+.search-input{flex:1;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:11px 13px;color:#fff;font-size:14px;font-family:'Lexend',sans-serif;outline:none}
+.search-input:focus{border-color:#C9A22766}
+.search-go{padding:11px 16px;background:#C9A227;border:none;border-radius:10px;color:#1a1a0e;font-weight:700;font-size:14px;cursor:pointer;font-family:'Lexend',sans-serif}
+.search-results{flex:1;overflow-y:auto;padding:12px}
+.search-empty{text-align:center;color:#333;font-size:13px;padding:40px 20px;line-height:1.6}
+.result-row{background:#161616;border:1px solid #222;border-radius:12px;padding:14px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.result-row:active{background:#1e1e1e}
+.rr-name{font-size:14px;font-weight:600;color:#ddd;margin-bottom:2px}
+.rr-meta{font-size:11px;color:#444}
+
+#pin-screen{position:absolute;inset:0;background:#0d0d0d;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px}
+.pin-icon{width:72px;height:72px;border-radius:50%;background:#C9A22714;border:2px solid #C9A22740;display:flex;align-items:center;justify-content:center;font-size:30px;margin-bottom:20px}
+.pin-title{font-size:22px;font-weight:700;margin-bottom:6px}
+.pin-sub{font-size:12px;color:#444;margin-bottom:32px;text-align:center;line-height:1.6}
+.pin-input{width:100%;max-width:290px;background:#161616;border:1px solid #252525;border-radius:13px;padding:16px;color:#fff;font-size:24px;text-align:center;letter-spacing:8px;outline:none;font-family:'Lexend',sans-serif;margin-bottom:12px}
+.pin-input:focus{border-color:#C9A22755}
+.pin-err{color:#ef5350;font-size:12px;text-align:center;margin-bottom:10px;min-height:18px}
+.pin-submit{width:100%;max-width:290px;padding:15px 0;border-radius:13px;border:none;background:#C9A227;color:#1a1a0e;font-size:16px;font-weight:700;cursor:pointer;font-family:'Lexend',sans-serif}
+.pin-submit:disabled{background:#2a2a2a;color:#444;cursor:not-allowed}
+.pin-submit:active:not(:disabled){opacity:.85}
+
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- PIN screen -->
+  <div id="pin-screen">
+    <div class="pin-icon">🛡️</div>
+    <div class="pin-title">Gate Scanner</div>
+    <div class="pin-sub">Anapsyxis 2026<br>Enter PIN to continue</div>
+    <input class="pin-input" id="pin-input" type="password" inputmode="numeric" placeholder="••••" maxlength="8" autocomplete="off">
+    <div class="pin-err" id="pin-err"></div>
+    <button class="pin-submit" id="pin-submit" disabled>Enter</button>
+  </div>
+
+  <!-- Header (hidden until PIN unlocked) -->
+  <div class="header" id="main-header" style="display:none">
+    <div>
+      <div class="header-title">Anapsyxis 2026</div>
+      <div class="header-sub" id="header-sub">Gate check-in</div>
+    </div>
+    <div class="header-btns">
+      <button class="icon-btn" onclick="openSearch()" title="Search">🔍</button>
+      <button class="icon-btn" onclick="openStats()" title="Stats">📊</button>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="body" id="main-body" style="display:none">
+
+    <!-- Scanner section -->
+    <div id="scanner-section">
+      <div class="scanner-wrap" id="scanner-wrap">
+        <video id="video" muted playsinline></video>
+        <canvas id="canvas"></canvas>
+        <div class="scan-overlay" id="scan-overlay" style="display:none">
+          <div class="scan-frame">
+            <div class="corner tl"></div><div class="corner tr"></div>
+            <div class="corner bl"></div><div class="corner br"></div>
+            <div class="scanline"></div>
+          </div>
+        </div>
+        <!-- Camera state messages -->
+        <div class="cam-state" id="cam-starting">
+          <div class="cam-state-icon">📷</div>
+          <div class="cam-state-title">Starting camera…</div>
+          <div class="cam-state-msg">Allow camera access when prompted</div>
+        </div>
+        <div class="cam-state" id="cam-denied" style="display:none">
+          <div class="cam-state-icon">🔒</div>
+          <div class="cam-state-title">Camera permission needed</div>
+          <div class="cam-state-msg">Tap the lock icon in the address bar, allow camera, then reload.</div>
+          <button class="reload-btn" onclick="location.reload()">Reload page</button>
+        </div>
+        <div class="cam-state" id="cam-error-msg" style="display:none">
+          <div class="cam-state-icon">⚠️</div>
+          <div class="cam-state-title">Camera unavailable</div>
+          <div class="cam-state-msg">Use the manual entry field below to look up tickets.</div>
+        </div>
+      </div>
+      <div class="scan-hint" id="scan-hint" style="display:none">
+        <div class="pulse"></div> Point camera at ticket QR code
+      </div>
+      <div class="manual-entry">
+        <input class="reg-input" id="reg-input" type="text" placeholder="Or type Reg ID manually…" autocomplete="off">
+        <button class="lookup-btn" onclick="manualLookup()">Look up</button>
+      </div>
+    </div>
+
+    <!-- Result section -->
+    <div id="result-section" style="display:none"></div>
+
+    <!-- Stats overlay -->
+    <div class="overlay" id="stats-overlay" style="display:none">
+      <div class="stats-panel">
+        <div class="stats-header">
+          <div class="stats-title">Gate statistics</div>
+          <button class="close-btn" onclick="closeStats()">✕</button>
+        </div>
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card" style="grid-column:span 2;text-align:center;color:#555;padding:24px">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search overlay -->
+    <div class="overlay" id="search-overlay" style="display:none">
+      <div class="search-bar">
+        <input class="search-input" id="search-input" type="text" placeholder="Name, Reg ID, or branch…" autocomplete="off">
+        <button class="search-go" onclick="runSearch()">Go</button>
+        <button class="icon-btn" onclick="closeSearch()">✕</button>
+      </div>
+      <div class="search-results" id="search-results">
+        <div class="search-empty">Type at least 2 characters to search</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── CONFIG — paste your Apps Script Web App URL here ─────────
+const BACKEND_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL';
+
+// ── State ────────────────────────────────────────────────────
+let PIN        = null;
+let scanning   = false;
+let rafId      = null;
+let lastScanTs = 0;
+const DEBOUNCE = 3000;
+
+// ── API via fetch ────────────────────────────────────────────
+async function api(body) {
+  const res = await fetch(BACKEND_URL, {
+    method:  'POST',
+    headers: { 'Content-Type': 'text/plain' }, // Apps Script requires text/plain for CORS
+    body:    JSON.stringify(body),
+    redirect: 'follow',
+  });
+  return res.json();
+}
+
+// ── PIN ──────────────────────────────────────────────────────
+const pinInput  = document.getElementById('pin-input');
+const pinSubmit = document.getElementById('pin-submit');
+const pinErr    = document.getElementById('pin-err');
+
+pinInput.addEventListener('input', () => {
+  pinSubmit.disabled = pinInput.value.length < 1;
+  pinErr.textContent = '';
+});
+pinInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitPin(); });
+pinSubmit.addEventListener('click', submitPin);
+
+async function submitPin() {
+  pinSubmit.disabled = true;
+  pinSubmit.innerHTML = '<span class="spinner"></span>Verifying…';
+  try {
+    const res = await api({ action: 'verify_pin', pin: pinInput.value });
+    if (res.success) {
+      PIN = pinInput.value;
+      document.getElementById('pin-screen').style.display      = 'none';
+      document.getElementById('main-header').style.display     = 'flex';
+      document.getElementById('main-body').style.display       = 'block';
+      startCamera();
+    } else {
+      pinErr.textContent        = res.error || 'Incorrect PIN. Try again.';
+      pinInput.value            = '';
+      pinSubmit.disabled        = false;
+      pinSubmit.textContent     = 'Enter';
+    }
+  } catch(e) {
+    pinErr.textContent    = 'Connection error. Check your internet and try again.';
+    pinSubmit.disabled    = false;
+    pinSubmit.textContent = 'Enter';
+  }
+}
+
+// ── Camera ───────────────────────────────────────────────────
+async function startCamera() {
+  const video     = document.getElementById('video');
+  const starting  = document.getElementById('cam-starting');
+  const denied    = document.getElementById('cam-denied');
+  const errMsg    = document.getElementById('cam-error-msg');
+  const overlay   = document.getElementById('scan-overlay');
+  const hint      = document.getElementById('scan-hint');
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    starting.style.display = 'none';
+    errMsg.style.display   = 'flex';
+    return;
+  }
+
+  try {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+    } catch(_) {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    }
+
+    video.srcObject = stream;
+    await video.play();
+
+    // Camera running — show scan UI
+    starting.style.display = 'none';
+    overlay.style.display  = 'flex';
+    hint.style.display     = 'flex';
+    scanning = true;
+    requestAnimationFrame(scanFrame);
+
+  } catch(err) {
+    starting.style.display = 'none';
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      denied.style.display = 'flex';
+    } else {
+      errMsg.style.display = 'flex';
+    }
+  }
+}
+
+function stopCamera() {
+  scanning = false;
+  if (rafId) cancelAnimationFrame(rafId);
+  const video = document.getElementById('video');
+  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+}
+
+// ── QR scan loop ─────────────────────────────────────────────
+function scanFrame() {
+  if (!scanning) return;
+  rafId = requestAnimationFrame(scanFrame);
+
+  const video  = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  if (video.readyState !== 4) return;
+
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx     = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const now = Date.now();
+  if (now - lastScanTs < DEBOUNCE) return;
+
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const code    = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' });
+  if (code && code.data) {
+    lastScanTs = now;
+    const regId = code.data.split('|')[0].trim().toUpperCase();
+    if (regId) lookupRegId(regId);
+  }
+}
+
+function manualLookup() {
+  const val = document.getElementById('reg-input').value.trim().toUpperCase();
+  if (!val) return;
+  lookupRegId(val);
+}
+document.getElementById('reg-input').addEventListener('keydown', e => { if (e.key === 'Enter') manualLookup(); });
+
+// ── Lookup ───────────────────────────────────────────────────
+async function lookupRegId(regId) {
+  showResult('<div style="text-align:center;padding:40px 0;color:#555"><span class="spinner"></span> Looking up…</div>');
+  try {
+    const res = await api({ action: 'scan', pin: PIN, regId });
+    renderResult(res);
+  } catch(e) {
+    renderInfoCard('⚠️', 'Connection error', 'Could not reach the server. Check your internet and try again.', true);
+  }
+}
+
+// ── Result rendering ─────────────────────────────────────────
+const COLORS = {
+  VALID:           { bg:'#0a1f0a', border:'#2e7d32', text:'#66bb6a', icon:'✓' },
+  ALREADY_SCANNED: { bg:'#201000', border:'#f57c00', text:'#ffb74d', icon:'⚠' },
+  UNCONFIRMED:     { bg:'#200000', border:'#c62828', text:'#ef9a9a', icon:'✗' },
+  NOT_FOUND:       { bg:'#0a0a20', border:'#512da8', text:'#b39ddb', icon:'?' },
+};
+
+function renderResult(res) {
+  if (!res.attendee) {
+    const c = COLORS[res.status] || COLORS.NOT_FOUND;
+    renderInfoCard(
+      res.status === 'NOT_FOUND' ? '🔍' : '⚠️',
+      res.status === 'NOT_FOUND' ? 'Ticket not found' : 'Not valid for entry',
+      res.message || '',
+      false,
+      c
+    );
+    return;
+  }
+
+  const a = res.attendee;
+  const c = COLORS[res.status] || COLORS.VALID;
+  const isValid  = res.status === 'VALID';
+  const isRepeat = res.status === 'ALREADY_SCANNED';
+  const isMale   = a.gender === 'Male';
+
+  const labelMap = { VALID:'Valid', ALREADY_SCANNED:'Already scanned', UNCONFIRMED:'Payment unconfirmed' };
+  const label    = (labelMap[res.status] || res.status).toUpperCase();
+
+  showResult(`
+    <div class="result-card" style="background:${c.bg};border:2px solid ${c.border}">
+      <div class="status-row" style="border-bottom:1px solid ${c.border}44">
+        <div class="status-icon" style="background:${c.border}22;color:${c.text}">${c.icon}</div>
+        <div>
+          <div class="status-label" style="color:${c.text}">${label}</div>
+          ${isRepeat ? `<div class="status-sub" style="color:${c.text}">Checked in: ${a.checkedIn}</div>` : ''}
+        </div>
+      </div>
+      <div class="att-label">Attendee</div>
+      <div class="att-name">${a.name}</div>
+      <div class="detail-grid">
+        <div><div class="dl">Reg ID</div><div class="dv mono">${a.regId}</div></div>
+        <div><div class="dl">Branch</div><div class="dv" style="font-size:11px">${a.branch}</div></div>
+        <div>
+          <div class="dl">Gender</div>
+          <span class="gbadge" style="background:${isMale?'#0d2241':'#2a0d20'};color:${isMale?'#90caf9':'#f48fb1'};border:1px solid ${isMale?'#1565c0':'#880e4f'}">${a.gender}</span>
+        </div>
+        <div><div class="dl">Category</div><div class="dv" style="font-size:11px">${a.category}</div></div>
+        <div><div class="dl">Bed number</div><div class="dv hi">${a.bed}</div></div>
+        <div><div class="dl">Workforce</div><div class="dv">${a.workforce || '—'}</div></div>
+      </div>
+      <div class="action-row">
+        ${isValid ? `<button class="checkin-btn" id="ci-btn" onclick="doCheckIn(${res.sheetRow})">Confirm check-in</button>` : ''}
+        <button class="cancel-btn" style="${!isValid?'flex:1':''}" onclick="resetScanner()">${isValid ? '✕' : 'Scan next'}</button>
+      </div>
+    </div>`);
+}
+
+function renderInfoCard(emoji, title, msg, isError, c) {
+  const border = c ? c.border : (isError ? '#c62828' : '#512da8');
+  const bg     = c ? c.bg     : (isError ? '#200000' : '#0a0a20');
+  const col    = c ? c.text   : (isError ? '#ef9a9a' : '#b39ddb');
+  showResult(`
+    <div class="info-card" style="background:${bg};border:2px solid ${border}">
+      <div class="info-emoji">${emoji}</div>
+      <div class="info-title" style="color:${col}">${title}</div>
+      <div class="info-msg">${msg}</div>
+      <button class="next-btn" onclick="resetScanner()">Try again</button>
+    </div>`);
+}
+
+async function doCheckIn(sheetRow) {
+  const btn = document.getElementById('ci-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Checking in…'; }
+  try {
+    const res = await api({ action: 'checkin', pin: PIN, sheetRow });
+    if (res.success) {
+      showResult(`
+        <div class="success-banner">
+          <div class="success-icon">✅</div>
+          <div class="success-title">Checked in!</div>
+          <div class="success-time">${res.checkInTime}</div>
+        </div>
+        <button class="next-btn" onclick="resetScanner()">Scan next ticket</button>`);
+    } else {
+      if (btn) { btn.disabled = false; btn.textContent = 'Confirm check-in'; }
+      alert('Check-in failed: ' + (res.error || 'Unknown error'));
+    }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirm check-in'; }
+    alert('Connection error. Please try again.');
+  }
+}
+
+function showResult(html) {
+  document.getElementById('scanner-section').style.display = 'none';
+  const rs = document.getElementById('result-section');
+  rs.innerHTML    = html;
+  rs.style.display = 'block';
+}
+
+function resetScanner() {
+  document.getElementById('reg-input').value       = '';
+  document.getElementById('result-section').innerHTML = '';
+  document.getElementById('result-section').style.display = 'none';
+  document.getElementById('scanner-section').style.display = 'block';
+  lastScanTs = 0;
+}
+
+// ── Stats ────────────────────────────────────────────────────
+async function openStats() {
+  const overlay = document.getElementById('stats-overlay');
+  overlay.style.display = 'flex';
+  overlay.style.alignItems = 'center';
+  overlay.style.justifyContent = 'center';
+  document.getElementById('stats-grid').innerHTML =
+    '<div class="stat-card" style="grid-column:span 2;text-align:center;color:#555;padding:24px"><span class="spinner"></span> Loading…</div>';
+  try {
+    const res = await api({ action: 'stats', pin: PIN });
+    if (res.success) {
+      const s = res.stats;
+      document.getElementById('stats-grid').innerHTML = [
+        ['Total registered',  s.total,     '#90caf9'],
+        ['Payment confirmed', s.confirmed,  '#66bb6a'],
+        ['Checked in',        s.checkedIn,  '#C9A227'],
+        ['Yet to arrive',     s.pending,    '#ffb74d'],
+        ['Male',              s.male,       '#90caf9'],
+        ['Female',            s.female,     '#f48fb1'],
+      ].map(([lbl,val,col]) =>
+        `<div class="stat-card"><div class="stat-num" style="color:${col}">${val}</div><div class="stat-lbl">${lbl}</div></div>`
+      ).join('');
+    }
+  } catch(e) {
+    document.getElementById('stats-grid').innerHTML =
+      '<div class="stat-card" style="grid-column:span 2;text-align:center;color:#ef5350;padding:24px">Failed to load</div>';
+  }
+}
+
+function closeStats() {
+  document.getElementById('stats-overlay').style.display = 'none';
+}
+
+// ── Search ───────────────────────────────────────────────────
+function openSearch() {
+  const o = document.getElementById('search-overlay');
+  o.style.display        = 'flex';
+  o.style.flexDirection  = 'column';
+  setTimeout(() => document.getElementById('search-input').focus(), 80);
+}
+
+function closeSearch() {
+  document.getElementById('search-overlay').style.display = 'none';
+  document.getElementById('search-input').value           = '';
+  document.getElementById('search-results').innerHTML     =
+    '<div class="search-empty">Type at least 2 characters to search</div>';
+}
+
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runSearch();
+});
+
+async function runSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  if (q.length < 2) return;
+  document.getElementById('search-results').innerHTML =
+    '<div class="search-empty"><span class="spinner"></span> Searching…</div>';
+  try {
+    const res = await api({ action: 'manual', pin: PIN, query: q });
+    if (!res.success || !res.results.length) {
+      document.getElementById('search-results').innerHTML =
+        '<div class="search-empty">No results found</div>';
+      return;
+    }
+    document.getElementById('search-results').innerHTML = res.results.map(r => {
+      const statusColor = r.checkedIn ? '#66bb6a'
+                        : r.payment.toLowerCase() === 'confirmed' ? '#ffb74d' : '#ef9a9a';
+      const statusText  = r.checkedIn ? '✓ In'
+                        : r.payment.toLowerCase() === 'confirmed' ? 'Pending' : 'Unconfirmed';
+      return `<div class="result-row" onclick="selectResult('${r.regId}')">
+        <div>
+          <div class="rr-name">${r.name}</div>
+          <div class="rr-meta">${r.regId} · ${r.branch}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:12px;font-weight:600;color:${statusColor}">${statusText}</div>
+          <div style="font-size:10px;color:#444;margin-top:2px">${r.bed}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('search-results').innerHTML =
+      '<div class="search-empty" style="color:#ef5350">Connection error</div>';
+  }
+}
+
+function selectResult(regId) {
+  closeSearch();
+  lookupRegId(regId);
+}
+</script>
+</body>
+</html>
