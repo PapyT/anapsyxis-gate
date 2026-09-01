@@ -10499,9 +10499,9 @@ function stopScanLoop() {
 function doScan() {
   if (!scanning) return;
 
-  // Safety: jsQR must be loaded
+  // jsQR is inlined — always available
   if (typeof jsQR !== 'function') {
-    setDebug('jsQR not loaded yet…');
+    setDebug('Error: jsQR missing — reload the page');
     return;
   }
 
@@ -10639,7 +10639,7 @@ function renderResult(res) {
           <span class="gbadge" style="background:${isMale?'#0d2241':'#2a0d20'};color:${isMale?'#90caf9':'#f48fb1'};border:1px solid ${isMale?'#1565c0':'#880e4f'}">${a.gender}</span>
         </div>
         <div><div class="dl">Category</div><div class="dv" style="font-size:11px">${a.category}</div></div>
-        <div><div class="dl">Bed number</div><div class="dv hi">${a.bed}</div></div>
+
         <div><div class="dl">Workforce</div><div class="dv">${a.workforce || '—'}</div></div>
         <div style="grid-column:span 2">
           <div class="dl" style="margin-bottom:6px">Attendance</div>
@@ -10784,7 +10784,7 @@ async function runSearch() {
         </div>
         <div style="text-align:right">
           <div style="font-size:12px;font-weight:600;color:${statusColor}">${statusText}</div>
-          <div style="font-size:10px;color:#444;margin-top:2px">${r.bed}</div>
+
         </div>
       </div>`;
     }).join('');
