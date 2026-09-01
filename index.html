@@ -143,6 +143,7 @@ canvas{display:none}
       <div class="header-sub" id="header-sub">Gate check-in</div>
     </div>
     <div class="header-btns">
+      <button class="icon-btn" id="torch-btn" onclick="toggleTorch()" title="Torch" style="display:none">🔦</button>
       <button class="icon-btn" onclick="openSearch()" title="Search">🔍</button>
       <button class="icon-btn" onclick="openStats()" title="Stats">📊</button>
     </div>
@@ -194,6 +195,7 @@ canvas{display:none}
       <div class="scan-hint" id="scan-hint" style="display:none">
         <div class="pulse"></div> Point camera at ticket QR code
       </div>
+      <div id="scan-debug" style="text-align:center;font-size:10px;color:#333;font-family:'Lexend',sans-serif;min-height:14px;margin-bottom:4px"></div>
       <div class="manual-entry">
         <input class="reg-input" id="reg-input" type="text" placeholder="Or type Reg ID manually…" autocomplete="off">
         <button class="lookup-btn" onclick="manualLookup()">Look up</button>
@@ -345,7 +347,7 @@ async function startCamera() {
     overlay.style.display  = 'flex';
     hint.style.display     = 'flex';
     scanning = true;
-    requestAnimationFrame(scanFrame);
+    startScanLoop();
 
     // Show torch button if supported
     try {
@@ -370,33 +372,56 @@ async function startCamera() {
 
 function stopCamera() {
   scanning = false;
+  stopScanLoop();
   if (rafId) cancelAnimationFrame(rafId);
   const video = document.getElementById('video');
-  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+  if (video && video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
 }
 
 // ── QR scan loop ─────────────────────────────────────────────
-function scanFrame() {
+// Uses setInterval instead of requestAnimationFrame — more reliable
+// on mobile Chrome where rAF can be throttled in background tabs.
+let scanInterval = null;
+
+function startScanLoop() {
+  if (scanInterval) clearInterval(scanInterval);
+  scanInterval = setInterval(doScan, 400); // scan every 400ms
+}
+
+function stopScanLoop() {
+  if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
+}
+
+function doScan() {
   if (!scanning) return;
-  rafId = requestAnimationFrame(scanFrame);
+
+  // Safety: jsQR must be loaded
+  if (typeof jsQR !== 'function') {
+    setDebug('jsQR not loaded yet…');
+    return;
+  }
 
   const video  = document.getElementById('video');
   const canvas = document.getElementById('canvas');
-  if (!video || video.readyState !== 4 || video.videoWidth === 0) return;
+  if (!video || !canvas) return;
 
-  const now = Date.now();
-  if (now - lastScanTs < DEBOUNCE) return;
+  // Accept any readyState >= 2 (HAVE_CURRENT_DATA) on mobile
+  if (video.readyState < 2 || video.videoWidth === 0) {
+    setDebug('Camera warming up…');
+    return;
+  }
 
-  // Draw full frame
   canvas.width  = video.videoWidth;
   canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  // Try full frame first
+  setDebug(`Scanning ${canvas.width}×${canvas.height}…`);
+
+  // Attempt 1: full frame
   let code = tryDecode(ctx, 0, 0, canvas.width, canvas.height);
 
-  // If not found, try cropped centre region (helps when QR fills frame)
+  // Attempt 2: centre 70% crop
   if (!code) {
     const cx = Math.floor(canvas.width  * 0.15);
     const cy = Math.floor(canvas.height * 0.15);
@@ -406,16 +431,23 @@ function scanFrame() {
   }
 
   if (code && code.data) {
-    lastScanTs = now;
+    setDebug('QR detected: ' + code.data.slice(0, 30));
+    stopScanLoop();
+    scanning = false;
+
     const regId = code.data.split('|')[0].trim().toUpperCase();
     if (regId) {
-      // Flash the scan frame green briefly
-      const frame = document.getElementById('scan-overlay');
-      if (frame) {
-        frame.style.filter = 'hue-rotate(120deg)';
-        setTimeout(() => { frame.style.filter = ''; }, 400);
+      // Flash green
+      const overlay = document.getElementById('scan-overlay');
+      if (overlay) {
+        overlay.style.filter = 'hue-rotate(120deg) brightness(1.5)';
+        setTimeout(() => { overlay.style.filter = ''; }, 500);
       }
       lookupRegId(regId);
+    } else {
+      // Bad QR — restart scanning
+      scanning = true;
+      startScanLoop();
     }
   }
 }
@@ -423,12 +455,16 @@ function scanFrame() {
 function tryDecode(ctx, x, y, w, h) {
   try {
     const imgData = ctx.getImageData(x, y, w, h);
-    // Try normal
-    let code = jsQR(imgData.data, imgData.width, imgData.height, {
+    return jsQR(imgData.data, imgData.width, imgData.height, {
       inversionAttempts: 'attemptBoth',
     });
-    return code;
   } catch(_) { return null; }
+}
+
+// Debug line shown below the scanner
+function setDebug(msg) {
+  const el = document.getElementById('scan-debug');
+  if (el) el.textContent = msg;
 }
 
 function manualLookup() {
@@ -563,7 +599,9 @@ function resetScanner() {
   document.getElementById('result-section').innerHTML = '';
   document.getElementById('result-section').style.display = 'none';
   document.getElementById('scanner-section').style.display = 'block';
-  lastScanTs = 0;
+  setDebug('Ready…');
+  scanning = true;
+  startScanLoop();
 }
 
 // ── Stats ────────────────────────────────────────────────────
