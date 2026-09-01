@@ -233,7 +233,7 @@ canvas{display:none}
 
 <script>
 // ── CONFIG — paste your Apps Script Web App URL here ─────────
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbye2Rhkx3FZtm0VWg1VLqkO04nnbssx7z6nc9V7fyYecdcqEuXPpIljfBZMPHnoJvnW/exec';
+const BACKEND_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL';
 
 // ── State ────────────────────────────────────────────────────
 let PIN        = null;
@@ -241,7 +241,7 @@ let scanning   = false;
 let rafId      = null;
 let lastScanTs = 0;
 let currentDay = 1; // 1=Sep3, 2=Sep4, 3=Sep5
-const DEBOUNCE = 3000;
+const DEBOUNCE = 800;
 
 function setDay(day) {
   currentDay = day;
@@ -275,6 +275,17 @@ pinInput.addEventListener('input', () => {
 });
 pinInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitPin(); });
 pinSubmit.addEventListener('click', submitPin);
+
+let torchOn = false;
+async function toggleTorch() {
+  if (!window._videoTrack) return;
+  try {
+    torchOn = !torchOn;
+    await window._videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
+    const btn = document.getElementById('torch-btn');
+    if (btn) btn.style.background = torchOn ? '#C9A227' : '#1a1a1a';
+  } catch(e) { console.log('Torch error:', e); }
+}
 
 async function submitPin() {
   pinSubmit.disabled = true;
@@ -336,6 +347,17 @@ async function startCamera() {
     scanning = true;
     requestAnimationFrame(scanFrame);
 
+    // Show torch button if supported
+    try {
+      const track = stream.getVideoTracks()[0];
+      const caps  = track.getCapabilities ? track.getCapabilities() : {};
+      if (caps.torch) {
+        const torchBtn = document.getElementById('torch-btn');
+        if (torchBtn) torchBtn.style.display = 'block';
+        window._videoTrack = track;
+      }
+    } catch(_) {}
+
   } catch(err) {
     starting.style.display = 'none';
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
@@ -360,23 +382,53 @@ function scanFrame() {
 
   const video  = document.getElementById('video');
   const canvas = document.getElementById('canvas');
-  if (video.readyState !== 4) return;
-
-  canvas.width  = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx     = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  if (!video || video.readyState !== 4 || video.videoWidth === 0) return;
 
   const now = Date.now();
   if (now - lastScanTs < DEBOUNCE) return;
 
-  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const code    = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' });
+  // Draw full frame
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  // Try full frame first
+  let code = tryDecode(ctx, 0, 0, canvas.width, canvas.height);
+
+  // If not found, try cropped centre region (helps when QR fills frame)
+  if (!code) {
+    const cx = Math.floor(canvas.width  * 0.15);
+    const cy = Math.floor(canvas.height * 0.15);
+    const cw = Math.floor(canvas.width  * 0.70);
+    const ch = Math.floor(canvas.height * 0.70);
+    code = tryDecode(ctx, cx, cy, cw, ch);
+  }
+
   if (code && code.data) {
     lastScanTs = now;
     const regId = code.data.split('|')[0].trim().toUpperCase();
-    if (regId) lookupRegId(regId);
+    if (regId) {
+      // Flash the scan frame green briefly
+      const frame = document.getElementById('scan-overlay');
+      if (frame) {
+        frame.style.filter = 'hue-rotate(120deg)';
+        setTimeout(() => { frame.style.filter = ''; }, 400);
+      }
+      lookupRegId(regId);
+    }
   }
+}
+
+function tryDecode(ctx, x, y, w, h) {
+  try {
+    const imgData = ctx.getImageData(x, y, w, h);
+    // Try normal
+    let code = jsQR(imgData.data, imgData.width, imgData.height, {
+      inversionAttempts: 'attemptBoth',
+    });
+    return code;
+  } catch(_) { return null; }
 }
 
 function manualLookup() {
